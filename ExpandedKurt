@@ -1,0 +1,1700 @@
+Kurt_SelectApricorn:
+	farcall FindApricornsInBag (/engine/menus/menu_2.asm)
+
+		; Checks the bag for Apricorns.
+		ld hl, wBuffer1
+		xor a
+		ld [hli], a
+		dec a
+		ld bc, 10
+		call ByteFill (/home/copy2.asm) ø
+
+		ld hl, ApricornBalls
+
+		.loop
+		ld a, [hl]
+		cp -1
+		jr z, .done
+		push hl
+		ld [wCurItem], a
+		ld hl, wNumItems
+		call CheckItem (/home/item.asm)
+
+			push hl
+			push de
+			push bc
+			ldh a, [hROMBank]
+			push af
+			ld a, BANK(_CheckItem)
+			rst Bankswitch (/home/rst.asm) ø
+
+			call _CheckItem (/engine/items/items.asm)
+
+				call DoesHLEqualNumItems (/engine/items/items.asm)
+
+					ld a, l
+					cp LOW(wNumItems)
+					ret nz
+					ld a, h
+					cp HIGH(wNumItems)
+					ret
+
+				jr nz, .nope
+				push hl
+				call CheckItemPocket (/engine/items/items.asm)
+
+					; Return the pocket for wCurItem in wItemAttributeParamBuffer.
+					ld a, ITEMATTR_POCKET
+					call GetItemAttr (/engine/items/items.asm)
+
+						; Get attribute a of wCurItem.
+						push hl
+						push bc
+
+						ld hl, ItemAttributes
+						ld c, a
+						ld b, 0
+						add hl, bc
+
+						xor a
+						ld [wItemAttributeParamBuffer], a
+
+						ld a, [wCurItem]
+						dec a
+						ld c, a
+						ld a, ITEMATTR_STRUCT_LENGTH
+						call AddNTimes (/home/math.asm) ø
+						ld a, BANK(ItemAttributes)
+						call GetFarByte (/home/copy2.asm) ø
+
+						pop bc
+						pop hl
+						ret
+
+					and $f
+					ld [wItemAttributeParamBuffer], a
+					ret
+
+				pop de
+				ld a, [wItemAttributeParamBuffer]
+				dec a
+				ld hl, .Pockets
+				rst JumpTable (/home/rst.asm) ø
+				ret
+
+				.Pockets:
+				; entries correspond to item types
+				dw .Item
+				dw .KeyItem
+				dw .Ball
+				dw .TMHM
+
+				.Ball:
+				ld hl, wNumBalls
+				jp CheckTheItem (/engine/items/items.asm)
+
+					ld a, [wCurItem]
+					ld c, a
+
+					.loop
+					inc hl
+					ld a, [hli]
+					cp -1
+					jr z, .done
+					cp c
+					jr nz, .loop
+					scf
+					ret
+
+				.TMHM:
+				ld h, d
+				ld l, e
+				ld a, [wCurItem]
+				ld c, a
+				call GetTMHMNumber (/engine/items/items.asm)
+
+					; Return the number of a TM/HM by item id c.
+					ld a, c
+					sub TM01
+					inc a
+					ld c, a
+					ret
+
+				jp CheckTMHM (/engine/items/items.asm)
+
+					dec c
+					ld b, $0
+					ld hl, wTMsHMs
+					add hl, bc
+					ld a, [hl]
+					and a
+					ret z
+					scf
+					ret
+
+				.KeyItem:
+				ld h, d
+				ld l, e
+				jp CheckKeyItems (/engine/items/items.asm)
+
+					ld a, [wCurItem]
+					ld c, a
+					ld hl, wKeyItems
+
+					.loop
+					ld a, [hli]
+					cp c
+					jr z, .done
+					cp -1
+					jr nz, .loop
+					and a
+					ret
+
+					.done
+					scf
+					ret
+
+				.Item:
+				ld h, d
+				ld l, e
+
+				.nope
+				jp CheckTheItem (/engine/items/items.asm)
+
+					ld a, [wCurItem]
+					ld c, a
+
+					.loop
+					inc hl
+					ld a, [hli]
+					cp -1
+					jr z, .done
+					cp c
+					jr nz, .loop
+					scf
+					ret
+
+			pop bc
+			ld a, b
+			rst Bankswitch (/home/rst.asm) ø
+			pop bc
+			pop de
+			pop hl
+			ret
+
+		pop hl
+		jr nc, .nope
+		ld a, [hl]
+		call .addtobuffer
+
+		.nope
+		inc hl
+		inc hl
+		jr .loop
+
+		.done
+		ld a, [wBuffer1]
+		and a
+		ret nz
+		scf
+		ret
+
+		.addtobuffer
+		push hl
+		ld hl, wBuffer1
+		inc [hl]
+		ld e, [hl]
+		ld d, 0
+		add hl, de
+		ld [hl], a
+		pop hl
+		ret
+
+	jr c, .nope
+	ld hl, .MenuHeader
+	call CopyMenuHeader (/home/menu2.asm)
+
+		ld de, wMenuHeader
+		ld bc, wMenuHeaderEnd - wMenuHeader
+		call CopyBytes (home/copy2.asm) ø
+		ldh a, [hROMBank]
+		ld [wMenuDataBank], a
+		ret
+
+	ld a, [wMenuSelection]
+	ld [wMenuCursorBuffer], a
+	xor a
+	ldh [hBGMapMode], a
+	call InitScrollingMenu (/home/scrolling_menu.asm)
+
+		ld a, [wMenuBorderTopCoord]
+		dec a
+		ld b, a
+		ld a, [wMenuBorderBottomCoord]
+		sub b
+		ld d, a
+		ld a, [wMenuBorderLeftCoord]
+		dec a
+		ld c, a
+		ld a, [wMenuBorderRightCoord]
+		sub c
+		ld e, a
+		push de
+		call Coord2Tile (/home/menu_window.asm)
+
+			; Return the address of wTileMap(c, b) in hl.
+			xor a
+			ld h, a
+			ld l, b
+			ld a, c
+			ld b, h
+			ld c, l
+			add hl, hl
+			add hl, hl
+			add hl, bc
+			add hl, hl
+			add hl, hl
+			ld c, a
+			xor a
+			ld b, a
+			add hl, bc
+			coord bc, 0, 0
+			add hl, bc
+			ret
+
+		pop bc
+		jp Textbox (/home/text.asm)
+
+			; Draw a text box at hl with room for b lines of c characters each.
+			; Places a border around the textbox, then switches the palette to the
+			; text black-and-white scheme.
+			push bc
+			push hl
+			call TextboxBorder (/home/text.asm)
+
+				; Top
+				push hl ; may be unnecessary with the removal of /home/mobile.asm
+				ld a, "┌"
+				ld [hli], a
+				inc a ; "─"
+				call .PlaceChars
+				inc a ; "┐"
+				ld [hl], a
+				pop hl
+
+				; Middle
+				ld de, SCREEN_WIDTH
+				add hl, de
+
+				.row
+				push hl
+				ld a, "│"
+				ld [hli], a
+				ld a, " "
+				call .PlaceChars
+				ld [hl], "│"
+				pop hl
+
+				ld de, SCREEN_WIDTH
+				add hl, de
+				dec b
+				jr nz, .row
+
+				; Bottom
+				ld a, "└"
+				ld [hli], a
+				ld a, "─"
+				call .PlaceChars
+				ld [hl], "┘"
+				ret
+
+				.PlaceChars:
+				; Place char a c times.
+				ld d, c
+
+				.loop
+				ld [hli], a
+				dec d
+				jr nz, .loop
+				ret
+
+			pop hl
+			pop bc
+			jr TextboxPalette (/home/text.asm)
+
+				; Fill text box width c height b at hl with pal 7
+				ld de, wAttrMap - wTileMap
+				add hl, de
+				inc b
+				inc b
+				inc c
+				inc c
+				ld a, PAL_BG_TEXT
+
+				.col
+				push bc
+				push hl
+
+				.row
+				ld [hli], a
+				dec c
+				jr nz, .row
+				pop hl
+				ld de, SCREEN_WIDTH
+				add hl, de
+				pop bc
+				dec b
+				jr nz, .col
+				ret
+
+	call UpdateSprites (/home/map_objects.asm)
+
+		ld a, [wVramState]
+		bit 0, a
+		ret z
+
+		farcall Function55e0 (/engine/overworld/map_objects.asm)
+
+			ld a, [wVramState]
+			bit 0, a
+			ret z
+			ld bc, wObjectStructs
+			xor a
+
+			.loop
+			ldh [hMapObjectIndexBuffer], a
+			call DoesObjectHaveASprite
+			jr z, .ok
+			call Function565c (/engine/overworld/map_objects.asm)
+
+				push bc
+				call Function56cd (/engine/overworld/map_objects.asm) ø
+				pop bc
+				jr c, SetFacing_Standing
+				call Function56a3 (/engine/overworld/map_objects.asm) ø
+				jr c, SetFacing_Standing
+				call Function5688 (/engine/overworld/map_objects.asm) ø
+				farcall Function4440 (/engine/overworld/map_objects.asm) ø
+				xor a
+				ret
+
+			.ok
+			ld hl, OBJECT_LENGTH
+			add hl, bc
+			ld b, h
+			ld c, l
+			ldh a, [hMapObjectIndexBuffer]
+			inc a
+			cp NUM_OBJECT_STRUCTS
+			jr nz, .loop
+			ret
+
+		farcall _UpdateSprites (/engine/overworld/map_objects.asm)
+
+			ld a, [wVramState]
+			bit 0, a
+			ret z
+			xor a
+			ldh [hUsedSpriteIndex], a
+			ldh a, [hOAMUpdate]
+			push af
+			ld a, 1
+			ldh [hOAMUpdate], a
+			call InitSprites
+			call .fill
+			pop af
+			ldh [hOAMUpdate], a
+			ret
+
+			.fill
+			ld a, [wVramState]
+			bit 1, a
+			ld b, LOW(wVirtualOAMEnd)
+			jr z, .ok
+			ld b, 28 * SPRITEOAMSTRUCT_LENGTH
+
+			.ok
+			ldh a, [hUsedSpriteIndex]
+			cp b
+			ret nc
+			ld l, a
+			ld h, HIGH(wVirtualOAM)
+			ld de, SPRITEOAMSTRUCT_LENGTH
+			ld a, b
+			ld c, SCREEN_HEIGHT_PX + 2 * TILE_WIDTH
+
+			.loop
+			ld [hl], c ; y
+			add hl, de
+			cp l
+			jr nz, .loop
+			ret
+
+		ret
+	
+	call ScrollingMenu (/home/scrolling_menu.asm)
+
+		call CopyMenuData (/home/menu_window.asm)
+
+			push hl
+			push de
+			push bc
+			push af
+			ld hl, wMenuDataPointer
+			ld a, [hli]
+			ld h, [hl]
+			ld l, a
+			ld de, wMenuDataFlags
+			ld bc, wMenuDataEnd - wMenuDataFlags
+			call CopyBytes (home/copy2.asm) ø
+			pop af
+			pop bc
+			pop de
+			pop hl
+			ret
+
+		ldh a, [hROMBank]
+		push af
+
+		ld a, BANK(_ScrollingMenu) ; aka BANK(_InitScrollingMenu)
+		rst Bankswitch (/home/rst.asm) ø
+
+		call _InitScrollingMenu (/engine/scrolling_menu.asm)
+
+			xor a
+			ld [wMenuJoypad], a
+			ldh [hBGMapMode], a
+			inc a
+			ldh [hInMenu], a
+			call InitScrollingMenuCursor (/engine/menus/scrolling_menu.asm)
+
+				ld hl, wMenuData_ItemsPointerAddr
+				ld a, [hli]
+				ld h, [hl]
+				ld l, a
+				ld a, [wMenuData_ItemsPointerBank]
+				call GetFarByte (/home/copy2.asm) ø
+				ld [wScrollingMenuListSize], a
+				ld a, [wMenuData_ScrollingMenuHeight]
+				ld c, a
+				ld a, [wMenuScrollPosition]
+				add c
+				ld c, a
+				ld a, [wScrollingMenuListSize]
+				inc a
+				cp c
+				jr nc, .skip
+				ld a, [wMenuData_ScrollingMenuHeight]
+				ld c, a
+				ld a, [wScrollingMenuListSize]
+				inc a
+				sub c
+				jr nc, .store
+				xor a
+
+				.store
+				ld [wMenuScrollPosition], a
+
+				.skip
+				ld a, [wMenuScrollPosition]
+				ld c, a
+				ld a, [wMenuCursorBuffer]
+				add c
+				ld b, a
+				ld a, [wScrollingMenuListSize]
+				inc a
+				cp b
+				jr c, .asm_2475a
+				jr nc, .asm_24763
+
+				.asm_2475a
+				xor a
+				ld [wMenuScrollPosition], a
+				ld a, $1
+				ld [wMenuCursorBuffer], a
+
+				.asm_24763
+				ret
+
+			call ScrollingMenu_InitFlags (/engine/menus/scrolling_menu.asm)
+
+				ld a, [wMenuDataFlags]
+				ld c, a
+				ld a, [wScrollingMenuListSize]
+				ld b, a
+				ld a, [wMenuBorderTopCoord]
+				add 1
+				ld [w2DMenuCursorInitY], a
+				ld a, [wMenuBorderLeftCoord]
+				add 0
+				ld [w2DMenuCursorInitX], a
+				ld a, [wMenuData_ScrollingMenuHeight]
+				cp b
+				jr c, .no_extra_row
+				jr z, .no_extra_row
+				ld a, b
+				inc a
+
+				.no_extra_row
+				ld [w2DMenuNumRows], a
+				ld a, 1
+				ld [w2DMenuNumCols], a
+				ld a, $8c
+				bit 2, c
+				jr z, .skip_set_0
+				set 0, a
+
+				.skip_set_0
+				bit 3, c
+				jr z, .skip_set_1
+				set 1, a
+
+				.skip_set_1
+				ld [w2DMenuFlags1], a
+				xor a
+				ld [w2DMenuFlags2], a
+				ld a, $20
+				ld [w2DMenuCursorOffsets], a
+				ld a, A_BUTTON | B_BUTTON | D_UP | D_DOWN
+				bit 7, c
+				jr z, .disallow_select
+				add SELECT
+
+				.disallow_select
+				bit 6, c
+				jr z, .disallow_start
+				add START
+
+				.disallow_start
+				ld [wMenuJoypadFilter], a
+				ld a, [w2DMenuNumRows]
+				ld b, a
+				ld a, [wMenuCursorBuffer]
+				and a
+				jr z, .reset_cursor
+				cp b
+				jr z, .cursor_okay
+				jr c, .cursor_okay
+
+				.reset_cursor
+				ld a, 1
+
+				.cursor_okay
+				ld [wMenuCursorY], a
+				ld a, 1
+				ld [wMenuCursorX], a
+				xor a
+				ld [wCursorCurrentTile], a
+				ld [wCursorCurrentTile + 1], a
+				ld [wCursorOffCharacter], a
+				ret
+
+			call ScrollingMenu_ValidateSwitchItem (/engine/menus/scrolling_menu.asm)
+
+				ld a, [wScrollingMenuListSize]
+				ld c, a
+				ld a, [wSwitchItem]
+				and a
+				jr z, .done
+				dec a
+				cp c
+				jr c, .done
+				xor a
+				ld [wSwitchItem], a
+
+				.done
+				ret
+
+			call ScrollingMenu_InitDisplay (/engine/menus/scrolling_menu.asm)
+
+				call ClearWholeMenuBox (/home/menu_window.asm)
+
+					call MenuBoxCoord2Tile (/home/menu_window.asm)
+
+						ld a, [wMenuBorderLeftCoord]
+						ld c, a
+						ld a, [wMenuBorderTopCoord]
+						ld b, a
+						;fallthrough to Coord2Tile
+
+						^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+						; Return the address of wTileMap(c, b) in hl.
+						xor a
+						ld h, a
+						ld l, b
+						ld a, c
+						ld b, h
+						ld c, l
+						add hl, hl
+						add hl, hl
+						add hl, bc
+						add hl, hl
+						add hl, hl
+						ld c, a
+						xor a
+						ld b, a
+						add hl, bc
+						coord bc, 0, 0
+						add hl, bc
+						ret
+
+					call GetMenuBoxDims (/home/menu_window.asm)
+
+						ld a, [wMenuBorderTopCoord] ; top
+						ld b, a
+						ld a, [wMenuBorderBottomCoord] ; bottom
+						sub b
+						ld b, a
+						ld a, [wMenuBorderLeftCoord] ; left
+						ld c, a
+						ld a, [wMenuBorderRightCoord] ; right
+						sub c
+						ld c, a
+						ret
+
+					inc c
+					inc b
+					call ClearBox (/home/text.asm)
+
+						ld a, " "
+						; fallthrough to FillBoxWithByte
+
+						^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+						.row
+						push bc
+						push hl
+
+						.col
+						ld [hli], a
+						dec c
+						jr nz, .col
+						pop hl
+						ld bc, SCREEN_WIDTH
+						add hl, bc
+						pop bc
+						dec b
+						jr nz, .row
+						ret
+
+					ret
+
+				ld a, [wMenuDataFlags]
+				bit 4, a ; place arrows
+				jr z, .okay
+				ld a, [wMenuScrollPosition]
+				and a
+				jr z, .okay
+				ld a, [wMenuBorderTopCoord]
+				ld b, a
+				ld a, [wMenuBorderRightCoord]
+				ld c, a
+				call Coord2Tile (/home/menu_window.asm)
+
+					; Return the address of wTileMap(c, b) in hl.
+					xor a
+					ld h, a
+					ld l, b
+					ld a, c
+					ld b, h
+					ld c, l
+					add hl, hl
+					add hl, hl
+					add hl, bc
+					add hl, hl
+					add hl, hl
+					ld c, a
+					xor a
+					ld b, a
+					add hl, bc
+					coord bc, 0, 0
+					add hl, bc
+					ret
+
+				ld [hl], "▲"
+
+				.okay
+				call MenuBoxCoord2Tile (/home/menu_window.asm)
+
+					ld a, [wMenuBorderLeftCoord]
+					ld c, a
+					ld a, [wMenuBorderTopCoord]
+					ld b, a
+					;fallthrough to Coord2Tile
+
+					^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+					; Return the address of wTileMap(c, b) in hl.
+					xor a
+					ld h, a
+					ld l, b
+					ld a, c
+					ld b, h
+					ld c, l
+					add hl, hl
+					add hl, hl
+					add hl, bc
+					add hl, hl
+					add hl, hl
+					ld c, a
+					xor a
+					ld b, a
+					add hl, bc
+					coord bc, 0, 0
+					add hl, bc
+					ret
+
+				ld bc, SCREEN_WIDTH + 1
+				add hl, bc
+				ld a, [wMenuData_ScrollingMenuHeight]
+				ld b, a
+				ld c, $0
+
+				.loop
+				ld a, [wMenuScrollPosition]
+				add c
+				ld [wScrollingMenuCursorPosition], a
+				ld a, c
+				call ScrollingMenu_GetListItemCoordAndFunctionArgs (/engine/menus/scrolling_menu.asm) ø
+				ld a, [wMenuSelection]
+				cp -1
+				jr z, .cancel
+				push bc
+				push hl
+				call ScrollingMenu_CallFunctions1and2 (/engine/menus/scrolling_menu.asm)
+
+					push hl
+					ld d, h
+					ld e, l
+					ld hl, wMenuData_ScrollingMenuFunction1
+					call CallPointerAt (/home.asm) ø
+					pop hl
+					ld a, [wMenuData_ScrollingMenuWidth]
+					and a
+					jr z, .done
+					ld e, a
+					ld d, $0
+					add hl, de
+					ld d, h
+					ld e, l
+					ld hl, wMenuData_ScrollingMenuFunction2
+					call CallPointerAt (/home.asm) ø
+
+					.done
+					ret
+
+				pop hl
+				ld bc, 2 * SCREEN_WIDTH
+				add hl, bc
+				pop bc
+				inc c
+				ld a, c
+				cp b
+				jr nz, .loop
+				ld a, [wMenuDataFlags]
+				bit 4, a ; place arrows
+				jr z, .done
+				ld a, [wMenuBorderBottomCoord]
+				ld b, a
+				ld a, [wMenuBorderRightCoord]
+				ld c, a
+				call Coord2Tile (/home/menu_window.asm) ø
+				ld [hl], "▼"
+
+				.done
+				ret
+
+				.cancel
+				ld a, [wMenuDataFlags]
+				bit 0, a ; call function on cancel
+				jr nz, .call_function
+				ld de, .string_2485f
+				call PlaceString (/home/text.asm)
+
+					push hl
+					; fallthrough to PlaceNextChar
+
+					^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+					ld a, [de]
+					cp "@"
+					jr nz, CheckDict
+					ld b, h
+					ld c, l
+					pop hl
+					ret
+					pop de
+					; fallthrough to NextChar
+
+					^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+					inc de
+					jp PlaceNextChar
+
+				ret
+
+				.string_2485f
+				db "CANCEL@"
+
+				.call_function
+				ld d, h
+				ld e, l
+				ld hl, wMenuData_ScrollingMenuFunction1
+				jp CallPointerAt (/home.asm)
+
+					ldh a, [hROMBank]
+					push af
+					ld a, [hli]
+					rst Bankswitch (/home/rst.asm) ø
+
+					ld a, [hli]
+					ld h, [hl]
+					ld l, a
+
+					call _hl_ (/home.asm)
+
+						jp hl
+
+					pop hl
+					ld a, h
+					rst Bankswitch (/home/rst.asm) ø
+					ret
+
+			call ApplyTilemap (/home/tilemap.asm)
+
+				ldh a, [hCGB]
+				and a
+				jr z, .dmg
+
+				ld a, [wSpriteUpdatesEnabled]
+				cp 0
+				jr z, .dmg
+
+				ld a, 1
+				ldh [hBGMapMode], a
+				jr CopyTilemapAtOnce (/home/tilemap.asm)
+
+					jr .CopyTilemapAtOnce
+
+					.CopyTilemapAtOnce:
+					ldh a, [hBGMapMode]
+					push af
+					xor a
+					ldh [hBGMapMode], a
+
+					ldh a, [hMapAnims]
+					push af
+					xor a
+					ldh [hMapAnims], a
+
+					.wait
+					ldh a, [rLY]
+					cp $7f
+					jr c, .wait
+
+					di
+					ld a, BANK(vTiles3)
+					ldh [rVBK], a
+					coord hl, 0, 0, wAttrMap
+					call .StackPointerMagic
+					ld a, BANK(vTiles0)
+					ldh [rVBK], a
+					coord hl, 0, 0
+					call .StackPointerMagic 
+
+					.wait2
+					ldh a, [rLY]
+					cp $7f
+					jr c, .wait2
+					ei
+
+					pop af
+					ldh [hMapAnims], a
+					pop af
+					ldh [hBGMapMode], a
+					ret
+
+					.StackPointerMagic:
+					; Copy all tiles to vBGMap
+					ld [hSPBuffer], sp
+					ld sp, hl
+					ldh a, [hBGMapAddress + 1]
+					ld h, a
+					ld l, 0
+					ld a, SCREEN_HEIGHT
+					ldh [hTilesPerCycle], a
+					ld b, 1 << 1 ; not in v/hblank
+					ld c, LOW(rSTAT)
+
+					.loop
+					rept SCREEN_WIDTH / 2
+					pop de
+					; if in v/hblank, wait until not in v/hblank
+					.loop\@
+					ldh a, [c]
+					and b
+					jr nz, .loop\@
+					; load BGMap0
+					ld [hl], e
+					inc l
+					ld [hl], d
+					inc l
+					endr
+
+					ld de, BG_MAP_WIDTH - SCREEN_WIDTH
+					add hl, de
+					ldh a, [hTilesPerCycle]
+					dec a
+					ldh [hTilesPerCycle], a
+					jr nz, .loop
+
+					ldh a, [hSPBuffer]
+					ld l, a
+					ldh a, [hSPBuffer + 1]
+					ld h, a
+					ld sp, hl
+					ret
+
+				.dmg
+				; WaitBGMap
+				ld a, 1
+				ldh [hBGMapMode], a
+				ld c, 4
+				call DelayFrames
+				ret
+
+			xor a
+			ldh [hBGMapMode], a
+			ret
+
+		call .UpdatePalettes (/home/scrolling_menu.asm)
+		call _ScrollingMenu (/engine/menus/scrolling_menu.asm)
+
+			.loop
+			call ScrollingMenuJoyAction (/engine/menus/scrolling_menu.asm)
+
+				.loop
+				call ScrollingMenuJoypad (/home/menu.asm)
+
+					callfar _ScrollingMenuJoypad (engine/menus/menu.asm)
+
+						ld hl, w2DMenuFlags2
+						res 7, [hl]
+						ldh a, [hBGMapMode]
+						push af
+						call MenuJoypadLoop (engine/menus/menu.asm)
+
+							.loop
+							call Move2DMenuCursor (engine/menus/menu.asm)
+
+								ld hl, wCursorCurrentTile
+								ld a, [hli]
+								ld h, [hl]
+								ld l, a
+								ld a, [hl]
+								cp "▶"
+								jr nz, Place2DMenuCursor
+								ld a, [wCursorOffCharacter]
+								ld [hl], a
+								; fallthrough to Place2DMenuCursor
+
+								^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+								ld a, [w2DMenuCursorInitY]
+								ld b, a
+								ld a, [w2DMenuCursorInitX]
+								ld c, a
+								call Coord2Tile
+								ld a, [w2DMenuCursorOffsets]
+								swap a
+								and $f
+								ld c, a
+								ld a, [wMenuCursorY]
+								ld b, a
+								xor a
+								dec b
+								jr z, .got_row
+
+								.row_loop
+								add c
+								dec b
+								jr nz, .row_loop
+
+								.got_row
+								ld c, SCREEN_WIDTH
+								call AddNTimes
+								ld a, [w2DMenuCursorOffsets]
+								and $f
+								ld c, a
+								ld a, [wMenuCursorX]
+								ld b, a
+								xor a
+								dec b
+								jr z, .got_col
+
+								.col_loop
+								add c
+								dec b
+								jr nz, .col_loop
+
+								.got_col
+								ld c, a
+								add hl, bc
+								ld a, [hl]
+								cp "▶"
+								jr z, .cursor_on
+								ld [wCursorOffCharacter], a
+								ld [hl], "▶"
+
+								.cursor_on
+								ld a, l
+								ld [wCursorCurrentTile], a
+								ld a, h
+								ld [wCursorCurrentTile + 1], a
+								ret
+
+							call .BGMap_OAM
+							call Do2DMenuRTCJoypad (/engine/menus/menu.asm)
+
+								.loopRTC
+								call RTC (/home/rtc.asm)
+								call Menu_WasButtonPressed (/engine/menus/menu.asm)
+
+									ld a, [w2DMenuFlags1]
+									bit 6, a
+									jr z, .skip_to_joypad
+									callfar PlaySpriteAnimationsAndDelayFrame
+
+									.skip_to_joypad
+									call JoyTextDelay (/home/joypad.asm)
+
+										call GetJoypad  (/home/joypad.asm) ø
+										ldh a, [hInMenu]
+										and a
+										ldh a, [hJoyPressed]
+										jr z, .ok
+										ldh a, [hJoyDown]
+
+										.ok
+										ldh [hJoyLast], a
+										ldh a, [hJoyPressed]
+										and a
+										jr z, .checkframedelay
+										ld a, 15
+										ld [wTextDelayFrames], a
+										ret
+
+										.checkframedelay
+										ld a, [wTextDelayFrames]
+										and a
+										jr z, .restartframedelay
+										xor a
+										ldh [hJoyLast], a
+										ret
+
+										.restartframedelay
+										ld a, 5
+										ld [wTextDelayFrames], a
+										ret
+
+									call GetMenuJoypad (/home/menu.asm)
+
+										push bc
+										push af
+										ldh a, [hJoyLast]
+										and D_PAD
+										ld b, a
+										ldh a, [hJoyPressed]
+										and BUTTONS
+										or b
+										ld b, a
+										pop af
+										ld a, b
+										pop bc
+										ret
+
+									and a
+									ret z
+									scf
+									ret
+
+								ret c
+								ld a, [w2DMenuFlags1]
+								bit 7, a
+								jr z, .loopRTC
+								and a
+								ret
+
+							jr nc, .done
+							call _2DMenuInterpretJoypad (/engine/menus/menu.asm)
+
+								call GetMenuJoypad
+								bit A_BUTTON_F, a
+								jp nz, .a_b_start_select
+								bit B_BUTTON_F, a
+								jp nz, .a_b_start_select
+								bit SELECT_F, a
+								jp nz, .a_b_start_select
+								bit START_F, a
+								jp nz, .a_b_start_select
+								bit D_RIGHT_F, a
+								jr nz, .d_right
+								bit D_LEFT_F, a
+								jr nz, .d_left
+								bit D_UP_F, a
+								jr nz, .d_up
+								bit D_DOWN_F, a
+								jr nz, .d_down
+								and a
+								ret
+
+								.set_bit_7
+								ld hl, w2DMenuFlags2
+								set 7, [hl]
+								scf
+								ret
+
+								.d_down
+								ld hl, wMenuCursorY
+								ld a, [w2DMenuNumRows]
+								cp [hl]
+								jr z, .check_wrap_around_down
+								inc [hl]
+								xor a
+								ret
+
+								.check_wrap_around_down
+								ld a, [w2DMenuFlags1]
+								bit 5, a
+								jr nz, .wrap_around_down
+								bit 3, a
+								jp nz, .set_bit_7
+								xor a
+								ret
+
+								.wrap_around_down
+								ld [hl], $1
+								xor a
+								ret
+
+								.d_up
+								ld hl, wMenuCursorY
+								ld a, [hl]
+								dec a
+								jr z, .check_wrap_around_up
+								ld [hl], a
+								xor a
+								ret
+
+								.check_wrap_around_up
+								ld a, [w2DMenuFlags1]
+								bit 5, a
+								jr nz, .wrap_around_up
+								bit 2, a
+								jp nz, .set_bit_7
+								xor a
+								ret
+
+								.wrap_around_up
+								ld a, [w2DMenuNumRows]
+								ld [hl], a
+								xor a
+								ret
+
+								.d_left
+								ld hl, wMenuCursorX
+								ld a, [hl]
+								dec a
+								jr z, .check_wrap_around_left
+								ld [hl], a
+								xor a
+								ret
+
+								.check_wrap_around_left
+								ld a, [w2DMenuFlags1]
+								bit 4, a
+								jr nz, .wrap_around_left
+								bit 1, a
+								jp nz, .set_bit_7
+								xor a
+								ret
+
+								.wrap_around_left
+								ld a, [w2DMenuNumCols]
+								ld [hl], a
+								xor a
+								ret
+
+								.d_right
+								ld hl, wMenuCursorX
+								ld a, [w2DMenuNumCols]
+								cp [hl]
+								jr z, .check_wrap_around_right
+								inc [hl]
+								xor a
+								ret
+
+								.check_wrap_around_right
+								ld a, [w2DMenuFlags1]
+								bit 4, a
+								jr nz, .wrap_around_right
+								bit 0, a
+								jp nz, .set_bit_7
+								xor a
+								ret
+
+								.wrap_around_right
+								ld [hl], $1
+								xor a
+								ret
+
+								.a_b_start_select
+								xor a
+								ret
+
+							jr c, .done
+							ld a, [w2DMenuFlags1]
+							bit 7, a
+							jr nz, .done
+							call GetMenuJoypad (/home/menu.asm)
+							ld b, a
+							ld a, [wMenuJoypadFilter]
+							and b
+							jr z, .loop
+
+							.done
+							ret
+
+							.BGMap_OAM:
+							ldh a, [hOAMUpdate]
+							push af
+							ld a, $1
+							ldh [hOAMUpdate], a
+							call WaitBGMap
+							pop af
+							ldh [hOAMUpdate], a
+							xor a
+							ldh [hBGMapMode], a
+							ret
+
+						pop af
+						ldh [hBGMapMode], a
+						ret
+
+					call GetMenuJoypad (/home/menu.asm)
+					ret
+
+				ldh a, [hJoyLast]
+				and D_PAD
+				ld b, a
+				ldh a, [hJoyPressed]
+				and BUTTONS
+				or b
+				bit A_BUTTON_F, a
+				jp nz, .a_button
+				bit B_BUTTON_F, a
+				jp nz, .b_button
+				bit SELECT_F, a
+				jp nz, .select
+				bit START_F, a
+				jp nz, .start
+				bit D_RIGHT_F, a
+				jp nz, .d_right
+				bit D_LEFT_F, a
+				jp nz, .d_left
+				bit D_UP_F, a
+				jp nz, .d_up
+				bit D_DOWN_F, a
+				jp nz, .d_down
+				jr .loop
+
+				.a_button
+				call PlaceHollowCursor (/home/menu.asm)
+
+					ld hl, wCursorCurrentTile
+					ld a, [hli]
+					ld h, [hl]
+					ld l, a
+					ld [hl], "▷"
+					ret
+
+				ld a, [wMenuCursorY]
+				dec a
+				call ScrollingMenu_GetListItemCoordAndFunctionArgs (/engine/menus/scrolling_menu.asm)
+
+					push de
+					push hl
+					ld e, a
+					ld a, [wMenuScrollPosition]
+					add e
+					ld e, a
+					ld d, $0
+					ld hl, wMenuData_ItemsPointerAddr
+					ld a, [hli]
+					ld h, [hl]
+					ld l, a
+					inc hl ; items
+					ld a, [wMenuData_ScrollingMenuItemFormat]
+					cp SCROLLINGMENU_ITEMS_NORMAL
+					jr z, .got_spacing
+					cp SCROLLINGMENU_ITEMS_QUANTITY
+					jr z, .pointless_jump
+
+					.pointless_jump
+					add hl, de
+
+					.got_spacing
+					add hl, de
+					ld a, [wMenuData_ItemsPointerBank]
+					call GetFarByte (/home/copy2.asm) ø
+					ld [wMenuSelection], a
+					ld [wCurItem], a
+					inc hl
+					ld a, [wMenuData_ItemsPointerBank]
+					call GetFarByte (/home/copy2.asm) ø
+					ld [wMenuSelectionQuantity], a
+					pop hl
+					pop de
+					ret
+
+				ld a, [wMenuSelection]
+				ld [wCurItem], a
+				ld a, [wMenuSelectionQuantity]
+				ld [wItemQuantityBuffer], a
+				call ScrollingMenu_GetCursorPosition (/engine/menus/scrolling_menu.asm)
+
+					ld a, [wMenuScrollPosition]
+					ld c, a
+					ld a, [wMenuCursorY]
+					add c
+					ld c, a
+					ret
+
+				dec a
+				ld [wScrollingMenuCursorPosition], a
+				ld [wCurItemQuantity], a
+				ld a, [wMenuSelection]
+				cp -1
+				jr z, .b_button
+				ld a, A_BUTTON
+				scf
+				ret
+
+				.b_button
+				ld a, B_BUTTON
+				scf
+				ret
+
+				.select
+				ld a, [wMenuDataFlags]
+				bit 7, a
+				jp z, xor_a_dec_a
+				ld a, [wMenuCursorY]
+				dec a
+				call ScrollingMenu_GetListItemCoordAndFunctionArgs (/engine/menus/scrolling_menu.asm) ø
+				ld a, [wMenuSelection]
+				cp -1
+				jp z, xor_a_dec_a
+				call ScrollingMenu_GetCursorPosition (/engine/menus/scrolling_menu.asm) ø
+				dec a
+				ld [wScrollingMenuCursorPosition], a
+				ld a, SELECT
+				scf
+				ret
+
+				.start
+				ld a, [wMenuDataFlags]
+				bit 6, a
+				jp z, xor_a_dec_a
+				ld a, START
+				scf
+				ret
+
+				.d_left
+				ld hl, w2DMenuFlags2
+				bit 7, [hl]
+				jp z, xor_a_dec_a
+				ld a, [wMenuDataFlags]
+				bit 3, a
+				jp z, xor_a_dec_a
+				ld a, D_LEFT
+				scf
+				ret
+
+				.d_right
+				ld hl, w2DMenuFlags2
+				bit 7, [hl]
+				jp z, xor_a_dec_a
+				ld a, [wMenuDataFlags]
+				bit 2, a
+				jp z, xor_a_dec_a
+				ld a, D_RIGHT
+				scf
+				ret
+
+				.d_up
+				ld hl, w2DMenuFlags2
+				bit 7, [hl]
+				jp z, xor_a
+				ld hl, wMenuScrollPosition
+				ld a, [hl]
+				and a
+				jr z, .xor_dec_up
+				dec [hl]
+				jp xor_a
+
+				.xor_dec_up
+				jp xor_a_dec_a
+
+				.d_down
+				ld hl, w2DMenuFlags2
+				bit 7, [hl]
+				jp z, xor_a
+				ld hl, wMenuScrollPosition
+				ld a, [wMenuData_ScrollingMenuHeight]
+				add [hl]
+				ld b, a
+				ld a, [wScrollingMenuListSize]
+				cp b
+				jr c, .xor_dec_down
+				inc [hl]
+				jp xor_a
+
+				.xor_dec_down
+				jp xor_a_dec_a
+
+
+			jp c, .exit
+			call z, .zero
+			jr .loop
+
+			.exit
+			call MenuClickSound
+			ld [wMenuJoypad], a
+			ld a, 0
+			ldh [hInMenu], a
+			ret
+
+			.zero
+			call ScrollingMenu_InitDisplay (/engine/menus/scrolling_menu.asm) ø
+			ld a, 1
+			ldh [hBGMapMode], a
+			ld c, 3
+			call DelayFrames
+			xor a
+			ldh [hBGMapMode], a
+			ret
+
+		pop af
+		rst Bankswitch (/home/rst.asm) ø
+
+		ld a, [wMenuJoypad]
+		ret
+
+		.UpdatePalettes:
+		ld hl, wVramState
+		bit 0, [hl]
+		jp nz, UpdateTimePals (/engine/tilesets/timeofday_pals.asm)
+
+			call UpdateTime (/home/time.asm)
+
+				call GetClock (/home/time.asm) ø
+				call FixDays (/home/time.asm) ø
+				call FixTime (/home/time.asm) ø
+				farcall GetTimeOfDay (/engine/rtc/rtc.asm) ø
+				ret
+
+			ld a, [wTimeOfDay]
+			ld [wCurTimeOfDay], a
+			call GetTimePalette
+			ld [wTimeOfDayPal], a
+			ret
+
+		jp SetPalettes (/home/tilemap.asm)
+
+			; Inits the Palettes
+			; depending on the system the monochromes palettes or color palettes
+			ldh a, [hCGB]
+			and a
+			jr nz, .SetPalettesForGameBoyColor
+			ld a, %11100100
+			ldh [rBGP], a
+			ld a, %11010000
+			ldh [rOBP0], a
+			ldh [rOBP1], a
+			ret
+
+			.SetPalettesForGameBoyColor:
+			push de
+			ld a, %11100100
+			call DmgToCgbBGPals (/home/palettes.asm)
+
+				; exists to forego reinserting cgb-converted image data
+				; input: a -> bgp
+
+				ldh [rBGP], a
+				push af
+
+				; Don't need to be here if DMG
+				ldh a, [hCGB]
+				and a
+				jr z, .end
+
+				push hl
+				push de
+				push bc
+				ldh a, [rSVBK]
+				push af
+
+				ld a, BANK(wBGPals2)
+				ldh [rSVBK], a
+
+				; copy & reorder bg pal buffer
+				ld hl, wBGPals2 ; to
+				ld de, wBGPals1 ; from
+
+				; order
+				ldh a, [rBGP]
+				ld b, a
+
+				; all pals
+				ld c, 8
+				call CopyPals (/home/palettes.asm)
+
+					; copy c palettes in order b from de to hl
+
+					push bc
+					ld c, NUM_PAL_COLORS
+
+					.loop
+					push de
+					push hl
+
+					; get pal color
+					ld a, b
+					maskbits 1 << PAL_COLOR_SIZE
+
+					; 2 bytes per color
+					add a
+					ld l, a
+					ld h, 0
+					add hl, de
+					ld e, [hl]
+					inc hl
+					ld d, [hl]
+
+					; dest
+					pop hl
+
+					; write color
+					ld [hl], e
+					inc hl
+					ld [hl], d
+					inc hl
+
+					; next pal color
+					rept PAL_COLOR_SIZE
+					srl b
+					endr
+
+					; source
+					pop de
+
+					; done pal?
+					dec c
+					jr nz, .loop
+
+					; de += 8 (next pal)
+					ld a, PALETTE_SIZE
+					add e
+					jr nc, .ok
+					inc d
+
+					.ok
+					ld e, a
+
+					; how many more pals?
+					pop bc
+					dec c
+					jr nz, CopyPals
+					ret
+
+				; request pal update
+				ld a, 1
+				ldh [hCGBPalUpdate], a
+
+				pop af
+				ldh [rSVBK], a
+				pop bc
+				pop de
+				pop hl
+
+				.end
+				pop af
+				ret
+
+			lb de, %11100100, %11100100
+			call DmgToCgbObjPals (/home/palettes.asm)
+
+				; exists to forego reinserting cgb-converted image data
+				; input: d -> obp1
+				;        e -> obp2
+
+				ld a, e
+				ldh [rOBP0], a
+				ld a, d
+				ldh [rOBP1], a
+
+				ldh a, [hCGB]
+				and a
+				ret z
+
+				push hl
+				push de
+				push bc
+				ldh a, [rSVBK]
+				push af
+
+				ld a, BANK(wOBPals2)
+				ldh [rSVBK], a
+
+				; copy & reorder obj pal buffer
+				ld hl, wOBPals2 ; to
+				ld de, wOBPals1 ; from
+
+				; order
+				ldh a, [rOBP0]
+				ld b, a
+
+				; all pals
+				ld c, 8
+				call CopyPals (/home/palettes.asm) ø
+
+				; request pal update
+				ld a, 1
+				ldh [hCGBPalUpdate], a
+
+				pop af
+				ldh [rSVBK], a
+				pop bc
+				pop de
+				pop hl
+				ret
+
+			pop de
+			ret
+
+	ld a, [wMenuJoypad]
+	cp B_BUTTON
+	jr z, .nope
+	ld a, [wMenuSelection]
+	cp -1
+	jr nz, .done
+	
+.nope
+	xor a ; FALSE
+
+.done
+	ld c, a
+	ret
